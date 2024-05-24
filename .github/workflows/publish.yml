@@ -3,10 +3,7 @@
 
 name: Create Release
 
-on:
-  push:
-    master
-    main
+on: push
 
 # Needed to create release and upload assets
 permissions:
