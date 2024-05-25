@@ -38,7 +38,7 @@ class CacheEngine:
         self.num_cpu_blocks = cache_config.num_cpu_blocks
 
         if cache_config.cache_dtype == "auto":
-            self.dtype = torch.float32
+            self.dtype = torch.float16
         else:
             self.dtype = STR_DTYPE_TO_TORCH_DTYPE[cache_config.cache_dtype]
 
@@ -95,7 +95,7 @@ class CacheEngine:
         value_cache_block = key_cache_block
         total = num_layers * (key_cache_block + value_cache_block)
         if cache_dtype == "auto":
-            dtype = torch.float32
+            dtype = torch.float16
         else:
             dtype = STR_DTYPE_TO_TORCH_DTYPE[cache_dtype]
         dtype_size = _get_dtype_size(dtype)
