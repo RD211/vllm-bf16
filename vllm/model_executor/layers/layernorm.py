@@ -29,15 +29,13 @@ class RMSNorm(nn.Module):
         residual: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """PyTorch-native implementation equivalent to forward()."""
-        orig_dtype = x.dtype
-        x = x.to(torch.float32)
         if residual is not None:
-            x = x + residual.to(torch.float32)
-            residual = x.to(orig_dtype)
+            x = x + residual
+            residual = x
 
         variance = x.pow(2).mean(dim=-1, keepdim=True)
         x = x * torch.rsqrt(variance + self.variance_epsilon)
-        x = x.to(orig_dtype) * self.weight
+        x = x * self.weight
         if residual is None:
             return x
         else:
@@ -48,19 +46,4 @@ class RMSNorm(nn.Module):
         x: torch.Tensor,
         residual: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        if residual is not None:
-            ops.fused_add_rms_norm(
-                x,
-                residual,
-                self.weight.data,
-                self.variance_epsilon,
-            )
-            return x, residual
-        out = torch.empty_like(x)
-        ops.rms_norm(
-            out,
-            x,
-            self.weight.data,
-            self.variance_epsilon,
-        )
-        return out
+        return self._forward(x, residual)
