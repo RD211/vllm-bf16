@@ -191,9 +191,9 @@ class LlamaDecoderLayer(nn.Module):
             linear_method=linear_method,
         )
         self.input_layernorm = RMSNorm(config.hidden_size,
-                                       eps=config.rms_norm_eps)
+                                       eps=config.rms_norm_eps).to(torch.float32)
         self.post_attention_layernorm = RMSNorm(config.hidden_size,
-                                                eps=config.rms_norm_eps)
+                                                eps=config.rms_norm_eps).to(torch.float32)
 
     def forward(
         self,
@@ -206,21 +206,24 @@ class LlamaDecoderLayer(nn.Module):
         # Self Attention
         if residual is None:
             residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states)
+            hidden_states = self.input_layernorm(hidden_states.to(torch.float32)).to(torch.bfloat16)
         else:
             hidden_states, residual = self.input_layernorm(
-                hidden_states, residual)
+                hidden_states.to(torch.float32), residual.to(torch.float32))
+            hidden_states = hidden_states.to(torch.bfloat16)
+            residual = residual.to(torch.bfloat16)
+
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
             kv_cache=kv_cache,
             attn_metadata=attn_metadata,
         )
-
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
-            hidden_states, residual)
-        hidden_states = self.mlp(hidden_states)
+            hidden_states.to(torch.float32), residual.to(torch.float32))
+        hidden_states = self.mlp(hidden_states.to(torch.bfloat16))
+        residual =  residual.to(torch.bfloat16)
         return hidden_states, residual
 
 
@@ -248,7 +251,7 @@ class LlamaModel(nn.Module):
             LlamaDecoderLayer(config, linear_method)
             for _ in range(config.num_hidden_layers)
         ])
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(torch.float32)
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -275,8 +278,8 @@ class LlamaModel(nn.Module):
                 attn_metadata,
                 residual,
             )
-        hidden_states, _ = self.norm(hidden_states, residual)
-        return hidden_states
+        hidden_states, _ = self.norm(hidden_states.to(torch.float32), residual.to(torch.float32))
+        return hidden_states.to(torch.bfloat16)
 
 
 class LlamaForCausalLM(nn.Module):
