@@ -76,7 +76,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
             if bias is not None:
                 return F.linear(x, weight) + bias
             return F.linear(x, weight)
-        return F.linear(x, weight, bias)
+        return F.linear(x.to(torch.float32), weight.to(torch.float32), bias.to(torch.float32)).to(torch.bfloat16)
 
 
 class ReplicatedLinear(torch.nn.Module):
