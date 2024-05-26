@@ -331,12 +331,12 @@ class LlamaForCausalLM(nn.Module):
             # We need bigger padding if using lora for kernel
             # compatibility
             if not lora_config else lora_config.lora_vocab_padding_size,
-        )
+        ).to(torch.float16)
 
         logit_scale = getattr(config, "logit_scale", 1.0)
         self.logits_processor = LogitsProcessor(self.unpadded_vocab_size,
-                                                config.vocab_size, logit_scale)
-        self.sampler = Sampler()
+                                                config.vocab_size, logit_scale).to(torch.float16)
+        self.sampler = Sampler().to(torch.float16)
 
     def forward(
         self,
@@ -347,7 +347,7 @@ class LlamaForCausalLM(nn.Module):
     ) -> torch.Tensor:
         hidden_states = self.model(input_ids, positions, kv_caches,
                                    attn_metadata)
-        return hidden_states.to(torch.bfloat16)
+        return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor,
                        sampling_metadata: SamplingMetadata) -> torch.Tensor:
