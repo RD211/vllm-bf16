@@ -155,7 +155,7 @@ class LlamaAttention(nn.Module):
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q.to(torch.float32), k.to(torch.float32), v.to(torch.float32), kv_cache, attn_metadata).to(torch.bfloat16)
         output, _ = self.o_proj(attn_output)
-        return output
+        return output.to(torch.float16)
 
 
 class LlamaDecoderLayer(nn.Module):
@@ -189,11 +189,11 @@ class LlamaDecoderLayer(nn.Module):
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
             linear_method=linear_method,
-        )
+        ).to(torch.float16)
         self.input_layernorm = RMSNorm(config.hidden_size,
-                                       eps=config.rms_norm_eps).to(torch.float32)
+                                       eps=config.rms_norm_eps).to(torch.float16)
         self.post_attention_layernorm = RMSNorm(config.hidden_size,
-                                                eps=config.rms_norm_eps).to(torch.float32)
+                                                eps=config.rms_norm_eps).to(torch.float16)
 
     def forward(
         self,
@@ -206,24 +206,22 @@ class LlamaDecoderLayer(nn.Module):
         # Self Attention
         if residual is None:
             residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states.to(torch.float32)).to(torch.bfloat16)
+            hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(
-                hidden_states.to(torch.float32), residual.to(torch.float32))
-            hidden_states = hidden_states.to(torch.bfloat16)
-            residual = residual.to(torch.bfloat16)
+                hidden_states, residual)
+
 
         hidden_states = self.self_attn(
             positions=positions,
-            hidden_states=hidden_states,
+            hidden_states=hidden_states.to(torch.bfloat16),
             kv_cache=kv_cache,
             attn_metadata=attn_metadata,
-        )
+        ).to(torch.float16)
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
-            hidden_states.to(torch.float32), residual.to(torch.float32))
-        hidden_states = self.mlp(hidden_states.to(torch.bfloat16))
-        residual =  residual.to(torch.bfloat16)
+            hidden_states, residual)
+        hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
 
 
@@ -251,7 +249,7 @@ class LlamaModel(nn.Module):
             LlamaDecoderLayer(config, linear_method)
             for _ in range(config.num_hidden_layers)
         ])
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(torch.float32)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(torch.float16)
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -268,6 +266,8 @@ class LlamaModel(nn.Module):
             hidden_states = inputs_embeds
         else:
             hidden_states = self.get_input_embeddings(input_ids)
+
+        hidden_states = hidden_states.to(torch.float16)
         residual = None
         for i in range(len(self.layers)):
             layer = self.layers[i]
@@ -278,8 +278,8 @@ class LlamaModel(nn.Module):
                 attn_metadata,
                 residual,
             )
-        hidden_states, _ = self.norm(hidden_states.to(torch.float32), residual.to(torch.float32))
-        return hidden_states.to(torch.bfloat16)
+        hidden_states, _ = self.norm(hidden_states, residual)
+        return hidden_states
 
 
 class LlamaForCausalLM(nn.Module):
@@ -347,7 +347,7 @@ class LlamaForCausalLM(nn.Module):
     ) -> torch.Tensor:
         hidden_states = self.model(input_ids, positions, kv_caches,
                                    attn_metadata)
-        return hidden_states
+        return hidden_states.to(torch.bfloat16)
 
     def compute_logits(self, hidden_states: torch.Tensor,
                        sampling_metadata: SamplingMetadata) -> torch.Tensor:
