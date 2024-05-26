@@ -189,7 +189,7 @@ class LlamaDecoderLayer(nn.Module):
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
             linear_method=linear_method,
-        )
+        ).to(torch.float16)
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps).to(torch.float32)
         self.post_attention_layernorm = RMSNorm(config.hidden_size,
@@ -222,7 +222,7 @@ class LlamaDecoderLayer(nn.Module):
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states.to(torch.float32), residual.to(torch.float32))
-        hidden_states = self.mlp(hidden_states.to(torch.bfloat16))
+        hidden_states = self.mlp(hidden_states.to(torch.float16)).to(torch.bfloat16)
         residual =  residual.to(torch.bfloat16)
         return hidden_states, residual
 
